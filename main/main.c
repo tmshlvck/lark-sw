@@ -1,6 +1,7 @@
-/* VARIO
- * LARK
- * TH
+/* main FreeRTOS entry point
+ * Lark - Lightweight ESP32 vario
+ *
+ * Copyright (C) 2018 Tomas Hlavacek (tomas.hlavacek@akaflieg.tu-darmstadt.de)
  */
 
 #include <stdio.h>
@@ -26,16 +27,9 @@
 
 
 
-#define BLINK_GPIO 18
-
-#define I2C_SCL 22
-#define I2C_SDA 21
-
-#define STACK_SIZE 2048
 
 /* globals */
-char audiovario_running = 0;
-char audiovario_stop = 0;
+#define STACK_SIZE 2048
 
 
 
@@ -43,54 +37,40 @@ float pt=0;
 float dpt=0;
 float dpt_test_dir = 1;
 
-
-
+#define BLINK_GPIO 18
 void debug_task(void *pvParameter)
 {
-    gpio_pad_select_gpio(BLINK_GPIO);
+    //gpio_pad_select_gpio(BLINK_GPIO); //default?
     gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
 
-    printf("long long size=%d\n", sizeof(long long));
-    printf("SAMPLE_MAX=%d\n", SAMPLE_MAX);
-
     while(1) {
-	//printf("dpt=%f\n", dpt);
 
 	dpt+=dpt_test_dir*0.2;
 	if (abs(dpt)>=10)
 		dpt_test_dir *= -1;
-	if (audiovario_running) {
-		audiovario_update(dpt);
-	}
+	audiovario_update(dpt);
 
-	vTaskDelay(200/portTICK_PERIOD_MS);
+	//vTaskDelay(200/portTICK_PERIOD_MS);
 
-	/*
         gpio_set_level(BLINK_GPIO, 1);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
         gpio_set_level(BLINK_GPIO, 0);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
-	*/
     }
-    while(1)
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
 }
+
 
 #define I2C_SCL 22
 #define I2C_SDA 21
 #define I2C_MASTER_TX_BUF_DISABLE  0
 #define I2C_MASTER_RX_BUF_DISABLE  0
 #define I2C_MASTER_FREQ_HZ         100000
-
 #define I2C_PRESS_ADDR 0x77
-
-
 static float compute_dpt(float update) {
 	float pt_prev = pt;
 	pt = update;
 	return 100*(update-pt_prev);
 }
-
 
 void sensor_read_task(void *pvParameter) {
 	vTaskDelay(100);
@@ -121,48 +101,53 @@ void sensor_read_task(void *pvParameter) {
 		//printf("read temp: %f\n", temp);
 
 		dpt = compute_dpt(press);
-		dpt = 1.5;
 		vTaskDelay(100/portTICK_PERIOD_MS);
 	}
 	
 }
 
-#define AUDIO_I2S_NUM 0
-#define AUDIO_BUFFER_SIZE 8192
-uint16_t samples_data[AUDIO_BUFFER_SIZE];
-void audiovario_task(void *pvParameter) {
-	vTaskDelay(200);
 
-	i2s_config_t i2s_config = {
-		.mode = I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN,
-		.sample_rate =  SAMPLE_RATE,
-		.bits_per_sample = SAMPLE_BITS,
-		.channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
-        	.communication_format = I2S_COMM_FORMAT_I2S_MSB,
-		.dma_buf_count = 4,
-        	.dma_buf_len = 1024,
-        	.use_apll = 0,
-	       	.intr_alloc_flags = 0
-	};
-	i2s_driver_install(AUDIO_I2S_NUM, &i2s_config, 0, NULL);
-	i2s_set_dac_mode(I2S_DAC_CHANNEL_RIGHT_EN);
-    	i2s_set_clk(AUDIO_I2S_NUM, SAMPLE_RATE, SAMPLE_BITS, I2S_CHANNEL_MONO);
+#define BUTTON_FNC GPIO_NUM_4
+#define BUTTON_VOL GPIO_NUM_5
+#define GPIO_INPUT_PIN_SEL (GPIO_SEL_4 | GPIO_SEL_5)
+#define ESP_INTR_FLAG_DEFAULT 0
 
-	audiovario_init();
-	audiovario_running = 1;
-
-	while (!audiovario_stop) {
-		audiovario_synthesise(samples_data, AUDIO_BUFFER_SIZE);
-		i2s_write_bytes(AUDIO_I2S_NUM, (const char *)samples_data,
-				AUDIO_BUFFER_SIZE*sizeof(uint16_t), portMAX_DELAY);
-		vTaskDelay(10/portTICK_PERIOD_MS);
-	}
-
-	audiovario_running = 0;
-
-	vTaskDelete(NULL);
+static xQueueHandle ctrl_evt_queue = NULL;
+static void IRAM_ATTR gpio_isr_handler(void* arg)
+{
+    uint32_t gpio_num = (uint32_t) arg;
+    xQueueSendFromISR(ctrl_evt_queue, &gpio_num, NULL);
 }
 
+static void init_buttons(void) {
+	gpio_config_t io_conf;
+	
+	io_conf.intr_type = GPIO_PIN_INTR_POSEDGE;
+	io_conf.pin_bit_mask = GPIO_INPUT_PIN_SEL;
+	io_conf.mode = GPIO_MODE_INPUT;
+	io_conf.pull_up_en = 1;
+	gpio_config(&io_conf);
+
+	ctrl_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+
+	gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
+	gpio_isr_handler_add(BUTTON_FNC, gpio_isr_handler, (void*) BUTTON_FNC);
+	gpio_isr_handler_add(BUTTON_VOL, gpio_isr_handler, (void*) BUTTON_VOL);
+}
+
+static void control_task(void *pvParameter) {
+	uint32_t button_num;
+
+	init_buttons();
+	audiovario_start();
+
+	while(1) {
+		if(xQueueReceive(ctrl_evt_queue, &button_num, portMAX_DELAY)) {
+			printf("button %d intr, val: %d\n", button_num, gpio_get_level(button_num));
+			audiovario_change_volume(10);
+		}
+	}
+}
 
 void app_main(void ) {
     	esp_err_t ret = nvs_flash_init();
@@ -176,8 +161,8 @@ void app_main(void ) {
 	//xTaskCreate(&networking_task, "networking_task", STACK_SIZE, NULL, 5, NULL);
 
 	xTaskCreate(&debug_task, "debug_task", STACK_SIZE, NULL, 5, NULL);
-//	xTaskCreate(&sensor_read_task, "sensor_read_task", STACK_SIZE, NULL, 5, NULL);
-	xTaskCreate(&audiovario_task, "audiovario_task", STACK_SIZE, NULL, 5, NULL);
+	//xTaskCreate(&sensor_read_task, "sensor_read_task", STACK_SIZE, NULL, 5, NULL);
+	xTaskCreate(&control_task, "control_task", STACK_SIZE, NULL, 10, NULL);
 }
 
 

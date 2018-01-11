@@ -1,11 +1,42 @@
+/* Lark Audiovario Sythesis
+ * Copyright (C) by Tomas Hlavacek (tomas.hlavacek@akaflieg.tu-darmstadt.de)
+ *
+ * Inspired by OpenVario (https://www.openvario.org) project.
+ *
+ * This file is part of Lark.
+ *
+ * Lark is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Lark is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Lark.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+
 #ifndef AUDIOVARIO
 #define AUDIOVARIO
 
-#define SAMPLE_RATE (44100)
-#define SAMPLE_BITS (16)
-#define SAMPLE_MAX ((1<<SAMPLE_BITS)-1)
+#include "freertos/FreeRTOS.h"
+
+/* FreeRTOS-specific and Lark-specific config */
+#define AUDIO_I2S_NUM 0
+#define AUDIO_BUFFER_SIZE 8192
+#define AUDIO_TASK_PERIOD_MS 10
+#define AUDIO_STACK_SIZE 2048
+
+#define AUDIO_SAMPLE_RATE (44100)
+#define AUDIO_SAMPLE_BITS (16)
+#define AUDIO_SAMPLE_MAX ((1<<AUDIO_SAMPLE_BITS)-1)
 
 
+/* TE Vario config */
 #define DEADBAND_LOW -0.0
 #define DEADBAND_HIGH 0.0 /* remain silent for DEADBAND_LOW < TE value < DEADBAND_HIGH */
 #define PULSE_LENGTH  12288 /* pulse period for positive TE values, in samples */
@@ -18,6 +49,7 @@
 #define FREQ_GAIN_POS 180
 #define FREQ_GAIN_NEG 0.75
 
+/* Speed-to-fly config */
 #define STF_DEADBAND_LOW -2.5
 #define STF_DEADBAND_HIGH 2.5
 #define STF_PULSE_LENGTH 12288
@@ -30,30 +62,21 @@
 #define STF_FREQ_GAIN_POS 30
 #define STF_FREQ_GAIN_NEG 0.1
 
+
+/* Definitions */
 typedef enum audiovario_mode {
   vario = 0,
   stf   = 1
 } audiovario_mode_t;
 
-typedef struct audiovario_config {
-	float deadband_low;
-	float deadband_high;
-	int pulse_length;
-	float pulse_length_gain;
-	int pulse_duty;
-	int pulse_rise;
-	int pulse_fall;
-	int base_freq_pos;
-	int base_freq_neg;
-	float freq_gain_pos;
-	float freq_gain_neg;
-} audiovario_config_t;
+/* API definitions */
 
-void audiovario_init(void);
+BaseType_t audiovario_start(void);
+void audiovario_stop(void);
 void audiovario_set_mode(audiovario_mode_t mode);
 int audiovario_change_volume(int delta);
+int audiovario_set_volume(int vol);
 void audiovario_update(float val);
-void audiovario_synthesise(uint16_t *buffer, size_t frames);
 
 #endif
 
