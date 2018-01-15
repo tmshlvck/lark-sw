@@ -1,5 +1,5 @@
 /* Lark Audiovario Sythesis
- * Copyright (C) by Tomas Hlavacek (tomas.hlavacek@akaflieg.tu-darmstadt.de)
+ * Copyright (C) 2018 Tomas Hlavacek (tomas.hlavacek@akaflieg.tu-darmstadt.de)
  *
  * Inspired by OpenVario (https://www.openvario.org) project.
  *
@@ -218,7 +218,7 @@ static void audiovario_synthesise(uint16_t *buffer, size_t frames) {
 }
 
 static void audiovario_task(void *pvParameter) {
-	uint16_t *samples_data = malloc(AUDIO_BUFFER_SIZE);
+	uint16_t *samples_data = malloc(AUDIO_BUFFER_SIZE * sizeof(uint16_t));
 
 	vTaskDelay(200);
 
@@ -232,6 +232,8 @@ static void audiovario_task(void *pvParameter) {
 	}
 
 	free(samples_data);
+
+	i2s_driver_uninstall(AUDIO_I2S_NUM);
 	vTaskDelete(NULL);
 }
 
@@ -248,10 +250,15 @@ BaseType_t audiovario_start(void) {
 		.dma_buf_count = 4,
         	.dma_buf_len = 1024,
         	.use_apll = 0,
-	       	.intr_alloc_flags = 0
+		.intr_alloc_flags = ESP_INTR_FLAG_LEVEL1
 	};
 
-	i2s_driver_install(AUDIO_I2S_NUM, &i2s_config, 0, NULL);
+	esp_err_t err = i2s_driver_install(AUDIO_I2S_NUM, &i2s_config, 0, NULL);
+	if (err != ESP_OK) {
+		printf("i2s_driver_install failed\n");
+		return err;
+	}
+
 	i2s_set_dac_mode(I2S_DAC_CHANNEL_RIGHT_EN);
     	i2s_set_clk(AUDIO_I2S_NUM, AUDIO_SAMPLE_RATE, AUDIO_SAMPLE_BITS, I2S_CHANNEL_MONO);
 

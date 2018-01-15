@@ -1,5 +1,5 @@
 /* Lark Audiovario Sythesis
- * Copyright (C) by Tomas Hlavacek (tomas.hlavacek@akaflieg.tu-darmstadt.de)
+ * Copyright (C) 2018 Tomas Hlavacek (tomas.hlavacek@akaflieg.tu-darmstadt.de)
  *
  * Inspired by OpenVario (https://www.openvario.org) project.
  *
@@ -20,8 +20,8 @@
  */
 
 
-#ifndef AUDIOVARIO
-#define AUDIOVARIO
+#ifndef AUDIOVARIO_H
+#define AUDIOVARIO_H
 
 #include "freertos/FreeRTOS.h"
 
