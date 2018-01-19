@@ -40,26 +40,6 @@
 #define CONST_PF2 44330.0f
 
 
-/*bool ms5611Init(I2C_TypeDef *i2cPort);
-bool ms5611SelfTest(void);
-bool ms5611EvaluateSelfTest(float min, float max, float value, char* string);
-float ms5611GetPressure(uint8_t osr);
-float ms5611CalcPressure(int32_t rawPress, int32_t dT);
-float ms5611GetTemperature(uint8_t osr);
-float ms5611CalcTemp(int32_t deltaT);
-int32_t ms5611GetDeltaTemp(uint8_t osr);
-int32_t ms5611CalcDeltaTemp(int32_t rawTemp);
-int32_t ms5611RawPressure(uint8_t osr);
-int32_t ms5611RawTemperature(uint8_t osr);
-bool ms5611ReadPROM();
-void ms5611Reset();
-void ms5611StartConversion(uint8_t command);
-int32_t ms5611GetConversion(uint8_t command);
-
-void ms5611GetData(float* pressure, float* temperature, float* asl);
-float ms5611PressureToAltitude(float* pressure);
-*/
-
 typedef struct calibration_reg{
 	uint16_t psens;
 	uint16_t off;
@@ -77,18 +57,15 @@ typedef struct ms5611_drv {
 	calibration_reg_t cr;
 } ms5611_drv_t;
 
-int ms5611_read_PROM(ms5611_drv_t *dev);
 void ms5611_reset(ms5611_drv_t *dev);
 int ms5611_init(ms5611_drv_t *dev, i2c_port_t i2c_num, uint8_t addr);
-void ms5611_start_conv(ms5611_drv_t *dev, int8_t command);
+void ms5611_start_conv_press(ms5611_drv_t *dev);
+void ms5611_start_conv_temp(ms5611_drv_t *dev);
 int32_t ms5611_get_conv(ms5611_drv_t *dev);
-int32_t ms5611_raw_pressure(ms5611_drv_t *dev, uint8_t osr);
-int32_t ms5611_raw_temp(ms5611_drv_t *dev, uint8_t osr);
+int32_t ms5611_get_deltatemp(ms5611_drv_t *dev, int32_t rawtemp);
+float ms5611_get_temp(ms5611_drv_t *dev, int32_t rawtemp);
+float ms5611_get_pressure(ms5611_drv_t *dev, int32_t rawpress, int32_t rawtemp);
 
-
-int32_t ms5611_get_deltatemp(ms5611_drv_t *dev, uint8_t osr);
-float ms5611_get_temp(ms5611_drv_t *dev, uint8_t osr);
-float ms5611_get_pressure(ms5611_drv_t *dev, uint8_t osr);
-float ms5611_calc_altitude(float* pressure/*, float* ground_pressure, float* ground_temp*/);
+float ms5611_calc_altitude(float pressure/*, float* ground_pressure, float* ground_temp*/);
 
 #endif // MS5611_H

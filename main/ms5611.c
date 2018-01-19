@@ -73,7 +73,7 @@ static esp_err_t ms5611_i2c_read_byte(i2c_port_t i2c_num, uint8_t addr, uint8_t 
 	if (ret != ESP_OK) {
 		return ret;
 	}
-	vTaskDelay(ms2tick(30));
+//	vTaskDelay(ms2tick(30));
 
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	i2c_master_start(cmd);
@@ -93,7 +93,7 @@ static esp_err_t ms5611_i2c_read(i2c_port_t i2c_num, uint8_t addr, uint8_t reg, 
 	if (ret != ESP_OK) {
 		return ret;
 	}
-	vTaskDelay(ms2tick(30));
+//	vTaskDelay(ms2tick(30));
 
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	i2c_master_start(cmd);
@@ -119,25 +119,10 @@ static esp_err_t ms5611_i2c_read(i2c_port_t i2c_num, uint8_t addr, uint8_t reg, 
 #define FIX_TEMP 25         // Fixed Temperature. ASL is a function of pressure and temperature, but as the temperature changes so much (blow a little towards the flie and watch it drop 5 degrees) it corrupts the ASL estimates.
                             // TLDR: Adjusting for temp changes does more harm than good.
 
-/*
-static uint8_t devAddr;
-static I2C_TypeDef *I2Cx;
-static bool isInit;
-
-static CalReg   calReg;
-static uint32_t lastPresConv;
-static uint32_t lastTempConv;
-static int32_t  tempCache;
-
-static uint8_t readState=0;
-static uint32_t lastConv=0;
-static int32_t tempDeltaT;
-*/
-
 /**
  * Reads factory calibration and store it into object variables.
  */
-int ms5611_read_PROM(ms5611_drv_t *dev)
+static int ms5611_read_PROM(ms5611_drv_t *dev)
 {
 	uint8_t buffer[MS5611_PROM_REG_SIZE];
 	uint16_t* cru16 = (uint16_t*)&dev->cr;
@@ -189,9 +174,17 @@ int ms5611_init(ms5611_drv_t *dev, i2c_port_t i2c_num, uint8_t addr)
 	return 0;
 }
 
-void ms5611_start_conv(ms5611_drv_t *dev, int8_t command)
+static void ms5611_start_conv(ms5611_drv_t *dev, int8_t command)
 {
 	ms5611_i2c_cmd(dev->i2c_num, dev->addr, command);
+}
+
+void ms5611_start_conv_press(ms5611_drv_t *dev) {
+	ms5611_start_conv(dev, MS5611_D1 + MS5611_OSR_DEFAULT);
+}
+
+void ms5611_start_conv_temp(ms5611_drv_t *dev) {
+	ms5611_start_conv(dev, MS5611_D2 + MS5611_OSR_DEFAULT);
 }
 
 int32_t ms5611_get_conv(ms5611_drv_t *dev)
@@ -206,34 +199,18 @@ int32_t ms5611_get_conv(ms5611_drv_t *dev)
 	return conversion;
 }
 
-int32_t ms5611_raw_pressure(ms5611_drv_t *dev, uint8_t osr)
+int32_t ms5611_get_deltatemp(ms5611_drv_t *dev, int32_t rawtemp)
 {
-	ms5611_start_conv(dev, MS5611_D1 + osr);
-	vTaskDelay(ms2tick(CONVERSION_TIME_MS));
-	return ms5611_get_conv(dev);
-}
-
-int32_t ms5611_raw_temp(ms5611_drv_t *dev, uint8_t osr)
-{
-	ms5611_start_conv(dev, MS5611_D2 + osr);
-	vTaskDelay(ms2tick(CONVERSION_TIME_MS));
-	return ms5611_get_conv(dev);
-}
-
-int32_t ms5611_get_deltatemp(ms5611_drv_t *dev, uint8_t osr)
-{
-	int32_t rawtemp = ms5611_raw_temp(dev, osr);
 	if (rawtemp != 0)
 		return rawtemp - (((int32_t)dev->cr.tref) << 8);
 	else
 		return 0;
 }
 
-float ms5611_get_temp(ms5611_drv_t *dev, uint8_t osr)
+float ms5611_get_temp(ms5611_drv_t *dev, int32_t rawtemp)
 {
 	/* see datasheet page 7 for formulas */
-	int32_t dT;
-	dT = ms5611_get_deltatemp(dev, osr);
+	int32_t dT = ms5611_get_deltatemp(dev, rawtemp);
 	if (dT != 0)
     		return (float)(((1 << EXTRA_PRECISION) * 2000)
 			+ (((int64_t)dT * dev->cr.tsens) >> (23 - EXTRA_PRECISION)))
@@ -243,11 +220,10 @@ float ms5611_get_temp(ms5611_drv_t *dev, uint8_t osr)
 		return 0;
 }
 
-float ms5611_get_pressure(ms5611_drv_t *dev, uint8_t osr)
+float ms5611_get_pressure(ms5611_drv_t *dev, int32_t rawpress, int32_t rawtemp)
 {
 	/* see datasheet page 7 for formulas */
-	int32_t rawpress = ms5611_raw_pressure(dev, osr);
-	int64_t dT = (int64_t)ms5611_get_deltatemp(dev, osr);
+	int64_t dT = (int64_t)ms5611_get_deltatemp(dev, rawtemp);
 	if (dT == 0)
 		return 0;
 
@@ -264,119 +240,14 @@ float ms5611_get_pressure(ms5611_drv_t *dev, uint8_t osr)
 /**
  * Converts pressure to altitude above sea level (ASL) in meters
 */
-float ms5611_calc_altitude(float* pressure/*, float* ground_pressure, float* ground_temp*/)
+float ms5611_calc_altitude(float pressure/*, float* ground_pressure, float* ground_temp*/)
 {
-	if (*pressure > 0) {
-		//return (1.f - pow(*pressure / CONST_SEA_PRESSURE, CONST_PF)) * CONST_PF2;
-		//return ((pow((1015.7 / *pressure), CONST_PF) - 1.0) * (25. + 273.15)) / 0.0065;
-		return ((pow((1015.7 / *pressure), CONST_PF) - 1.0) * (FIX_TEMP + 273.15)) / 0.0065;
+	if (pressure > 0) {
+		//return (1.f - pow(pressure / CONST_SEA_PRESSURE, CONST_PF)) * CONST_PF2;
+		//return ((pow((1015.7 / pressure), CONST_PF) - 1.0) * (25. + 273.15)) / 0.0065;
+		return ((pow((1015.7 / pressure), CONST_PF) - 1.0) * (FIX_TEMP + 273.15)) / 0.0065;
 	} else
 		return 0;
 }
 
-
-/*****************************************************************/
-/* code from Crazyflie-Firmware, thanks!!! */
-
-/*
-bool ms5611SelfTest(void)
-{
-  bool testStatus = TRUE;
-  int32_t rawPress;
-  int32_t rawTemp;
-  int32_t deltaT;
-  float pressure;
-  float temperature;
-
-  if (!isInit)
-    return FALSE;
-
-  ms5611StartConversion(MS5611_D1 + MS5611_OSR_4096);
-  vTaskDelay(M2T(CONVERSION_TIME_MS));
-  rawPress = ms5611GetConversion(MS5611_D1 + MS5611_OSR_4096);
-
-  ms5611StartConversion(MS5611_D2 + MS5611_OSR_4096);
-  vTaskDelay(M2T(CONVERSION_TIME_MS));
-  rawTemp = ms5611GetConversion(MS5611_D2 + MS5611_OSR_4096);
-
-  deltaT = ms5611CalcDeltaTemp(rawTemp);
-  temperature = ms5611CalcTemp(deltaT);
-  pressure = ms5611CalcPressure(rawPress, deltaT);
-
-  if (ms5611EvaluateSelfTest(MS5611_ST_PRESS_MIN, MS5611_ST_PRESS_MAX, pressure, "pressure") &&
-      ms5611EvaluateSelfTest(MS5611_ST_TEMP_MIN, MS5611_ST_TEMP_MAX, temperature, "temperature"))
-  {
-    DEBUG_PRINT("Self test [OK].\n");
-  }
-  else
-  {
-   testStatus = FALSE;
-  }
-
-  return testStatus;
-}
-
-bool ms5611EvaluateSelfTest(float min, float max, float value, char* string)
-{
-  if (value < min || value > max)
-  {
-    DEBUG_PRINT("Self test %s [FAIL]. low: %0.2f, high: %0.2f, measured: %0.2f\n",
-                string, min, max, value);
-    return FALSE;
-  }
-  return TRUE;
-}
-
-*/
-
-
-
-/**
- * Gets pressure, temperature and above sea level altitude estimate (asl).
- * Best called at 100hz. For every PRESSURE_PER_TEMP-1 pressure readings temp is read once.
- * Effective 50-90hz baro update and 50-10hz temperature update if called at 100hz.
- */
-/*
-void ms5611GetData(float* pressure, float* temperature, float* asl)
-{
-    int32_t tempPressureRaw, tempTemperatureRaw;
-
-    // Dont reader faster than we can
-    uint32_t now = xTaskGetTickCount();
-    if ((now - lastConv) < CONVERSION_TIME_MS)
-    {
-        return;
-    }
-    lastConv = now;
-
-    if (readState == 0)
-    {
-        // read temp
-        ++readState;
-        tempTemperatureRaw = ms5611GetConversion(MS5611_D2 + MS5611_OSR_DEFAULT);
-        tempDeltaT = ms5611CalcDeltaTemp(tempTemperatureRaw);
-        *temperature = ms5611CalcTemp(tempDeltaT);
-        // cmd to read pressure
-        ms5611StartConversion(MS5611_D1 + MS5611_OSR_DEFAULT);
-    }
-    else
-    {
-        // read pressure
-        ++readState;
-        tempPressureRaw = ms5611GetConversion(MS5611_D1 + MS5611_OSR_DEFAULT);
-        *pressure = ms5611CalcPressure(tempPressureRaw, tempDeltaT);
-        *asl = ms5611PressureToAltitude(pressure);
-        if (readState == PRESSURE_PER_TEMP){
-            // cmd to read temp
-            ms5611StartConversion(MS5611_D2 + MS5611_OSR_DEFAULT);
-            readState = 0;
-        }
-        else
-        {
-            // cmd to read pressure
-            ms5611StartConversion(MS5611_D1 + MS5611_OSR_DEFAULT);
-        }
-    }
-}
-*/
 

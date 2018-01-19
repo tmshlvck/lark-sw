@@ -26,10 +26,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
-#include "driver/gpio.h"
-#include "driver/spi_master.h"
 #include "driver/i2c.h"
-#include "driver/i2s.h"
 
 #include <sys/socket.h>
 #include "esp_wifi.h"
@@ -45,6 +42,7 @@
 #include "audiovario.h"
 #include "controls.h"
 #include "net.h"
+#include "vario.h"
 
 
 
@@ -54,9 +52,7 @@
 
 
 //////////////////////////////////////////////////////////////
-float pt=0;
-float dpt=0;
-float dpt_test_dir = 1;
+float vario_val_test_dir = 1;
 #define BLINK_GPIO 18
 void debug_task(void *pvParameter)
 {
@@ -64,17 +60,17 @@ void debug_task(void *pvParameter)
     gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
 
     while(1) {
-
-	dpt+=dpt_test_dir*0.2;
-	if (abs(dpt)>=5)
-		dpt_test_dir *= -1;
-	audiovario_update(dpt);
+/*
+	vario_val+=vario_val_test_dir*0.2;
+	if (abs(vario_val)>=5)
+		vario_val_test_dir *= -1; */
+	audiovario_update(vario_val);
 
 	//vTaskDelay(200/portTICK_PERIOD_MS);
-
+/*
         gpio_set_level(BLINK_GPIO, 1);
         vTaskDelay(100 / portTICK_PERIOD_MS);
-        gpio_set_level(BLINK_GPIO, 0);
+        gpio_set_level(BLINK_GPIO, 0); */
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 }
@@ -91,7 +87,7 @@ void app_main(void ) {
 	xTaskCreate(&networking_task, "networking_task", STACK_SIZE, NULL, 5, NULL);
 
 	xTaskCreate(&debug_task, "debug_task", STACK_SIZE, NULL, 5, NULL);
-	//xTaskCreate(&sensor_read_task, "sensor_read_task", STACK_SIZE, NULL, 5, NULL);
+	xTaskCreate(&sensor_read_task, "sensor_read_task", STACK_SIZE, NULL, 5, NULL);
 	xTaskCreate(&control_task, "control_task", STACK_SIZE, NULL, 10, NULL);
 }
 

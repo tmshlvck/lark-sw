@@ -25,7 +25,7 @@
 #define LARK_DEFAULT_SSID "lark-vario"
 #define LARK_MAX_STA_CONN 8
 #define LARK_DEFAULT_PWD "velikychobutek"
-#define NMEA_PORT 4352
+#define NMEA_PORT 4353
 
 #define WIFI_CONNECTED_BIT BIT0
 

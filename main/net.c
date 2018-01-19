@@ -36,12 +36,13 @@
 
 #include "sdkconfig.h"
 #include "net.h"
+#include "nmea.h"
 
 
-#define TAG "lark: "
+#define TAG "lark-net: "
 
 // debug
-extern float dpt;
+extern float vario_val;
 
 
 static int get_socket_error_code(int socket)
@@ -184,11 +185,11 @@ static void send_data(void *pvParameters) { // can be task
 
     while (1) {
     	memset(databuff, 0, PKTSIZE * sizeof(char));
-	sprintf(databuff, "%f\n", dpt);
+	//sprintf(databuff, "%f\n", vario_val);
+	Compose_Pressure_POV_fast(databuff, vario_val);
 
         int len = send(connect_socket, databuff, strlen(databuff), 0);
         if (len > 0) {
-	    len = 0;
         } else {
             int err = get_socket_error_code(connect_socket);
             if (err != ENOMEM) {
@@ -196,7 +197,7 @@ static void send_data(void *pvParameters) { // can be task
                 break;
             }
         }
-        vTaskDelay(10 / portTICK_RATE_MS);
+        vTaskDelay(100 / portTICK_RATE_MS);
     }
     free(databuff);
     //vTaskDelete(NULL);
