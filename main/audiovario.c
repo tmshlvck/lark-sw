@@ -25,9 +25,14 @@
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "driver/i2s.h"
+#include "esp_log.h"
+#include "esp_err.h"
 
+#include "vario.h"
 #include "audiovario.h" 
 
+#define TAG "audiovario"
+#define AUDIO_STACK_SIZE 2048
 
 typedef struct audiovario_config {
 	float deadband_low;
@@ -220,8 +225,6 @@ static void audiovario_synthesise(uint16_t *buffer, size_t frames) {
 static void audiovario_task(void *pvParameter) {
 	uint16_t *samples_data = malloc(AUDIO_BUFFER_SIZE * sizeof(uint16_t));
 
-	vTaskDelay(200);
-
 	audiovario_running = 1;
 
 	while (audiovario_running) {
@@ -237,9 +240,25 @@ static void audiovario_task(void *pvParameter) {
 	vTaskDelete(NULL);
 }
 
+SemaphoreHandle_t audio_feed_semaphore = NULL;
+
+static void audiovario_update_task(void *pvParameter) {
+	while(audiovario_running) {
+		if (xSemaphoreTake(audio_feed_semaphore, portMAX_DELAY)!= pdTRUE) {
+			ESP_LOGW(TAG, "semaphore failed!\n");
+			vTaskDelay(100/portTICK_PERIOD_MS);
+		}
+
+		audiovario_update(vario_val);
+	}
+
+	vTaskDelete(NULL);
+}
+
+
 BaseType_t audiovario_start(void) {
 	if (audiovario_running)
-		return NULL;
+		return ESP_FAIL;
 
 	i2s_config_t i2s_config = {
 		.mode = I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN,
@@ -247,8 +266,8 @@ BaseType_t audiovario_start(void) {
 		.bits_per_sample = AUDIO_SAMPLE_BITS,
 		.channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
         	.communication_format = I2S_COMM_FORMAT_I2S_MSB,
-		.dma_buf_count = 4,
-        	.dma_buf_len = 1024,
+		.dma_buf_count = AUDIO_DMA_BUFFER_NUM,
+        	.dma_buf_len = AUDIO_DMA_BUFFER_SIZE,
         	.use_apll = 0,
 		.intr_alloc_flags = ESP_INTR_FLAG_LEVEL1
 	};
@@ -264,11 +283,12 @@ BaseType_t audiovario_start(void) {
 
 	audiovario_init_synth();
 
-	return xTaskCreate(&audiovario_task, "audiovario_task", AUDIO_STACK_SIZE, NULL, 5, NULL);
+	xTaskCreate(&audiovario_task, "audiovario_task", AUDIO_STACK_SIZE, NULL, 5, NULL);
+	xTaskCreate(&audiovario_update_task, "audiovario_update_task", AUDIO_STACK_SIZE, NULL, 4, NULL);
+	return ESP_OK;
 }
 
 void audiovario_stop(void) {
 	audiovario_running = 0;
 }
-
 

@@ -51,7 +51,6 @@
 #define STACK_SIZE 4096
 
 
-//////////////////////////////////////////////////////////////
 float vario_val_test_dir = 1;
 #define BLINK_GPIO 18
 void debug_task(void *pvParameter)
@@ -64,13 +63,13 @@ void debug_task(void *pvParameter)
 	vario_val+=vario_val_test_dir*0.2;
 	if (abs(vario_val)>=5)
 		vario_val_test_dir *= -1; */
-	audiovario_update(vario_val);
+//	audiovario_update(vario_val);
 
 	//vTaskDelay(200/portTICK_PERIOD_MS);
-/*
+
         gpio_set_level(BLINK_GPIO, 1);
         vTaskDelay(100 / portTICK_PERIOD_MS);
-        gpio_set_level(BLINK_GPIO, 0); */
+        gpio_set_level(BLINK_GPIO, 0);
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 }
@@ -84,11 +83,18 @@ void app_main(void ) {
 	}
 	ESP_ERROR_CHECK(ret);
 
-	xTaskCreate(&networking_task, "networking_task", STACK_SIZE, NULL, 5, NULL);
+	xTaskCreate(&debug_task, "debug_task", STACK_SIZE, NULL, 4, NULL);
 
-	xTaskCreate(&debug_task, "debug_task", STACK_SIZE, NULL, 5, NULL);
-	xTaskCreate(&sensor_read_task, "sensor_read_task", STACK_SIZE, NULL, 5, NULL);
-	xTaskCreate(&control_task, "control_task", STACK_SIZE, NULL, 10, NULL);
+	net_feed_semaphore = xSemaphoreCreateBinary();
+	audio_feed_semaphore = xSemaphoreCreateBinary();
+
+	printf("Running 1\n");
+	sensor_read_init();
+	printf("Running 2\n");
+	audiovario_start();
+
+	xTaskCreate(&networking_task, "networking_task", STACK_SIZE, NULL, 4, NULL);
+	xTaskCreate(&control_task, "control_task", STACK_SIZE, NULL, 4, NULL);
 }
 
 

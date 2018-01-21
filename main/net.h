@@ -27,9 +27,7 @@
 #define LARK_DEFAULT_PWD "velikychobutek"
 #define NMEA_PORT 4353
 
-#define WIFI_CONNECTED_BIT BIT0
-
-
+extern SemaphoreHandle_t net_feed_semaphore; 
 
 
 void networking_task(void *pvParameters);

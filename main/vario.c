@@ -25,12 +25,10 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "freertos/event_groups.h"
+#include "freertos/queue.h"
 #include "driver/i2c.h"
-
-#include <sys/socket.h>
-#include "esp_wifi.h"
-#include "esp_event_loop.h"
 
 #include "esp_log.h"
 #include "esp_err.h"
@@ -39,8 +37,11 @@
 #include "sdkconfig.h"
 
 #include "ms5611.h"
+#include "net.h"
+#include "audiovario.h"
 
 
+#define STACK_SIZE 4096
 #define TAG "lark-vario: "
 
 
@@ -60,7 +61,7 @@ float static_pressure;
 
 
 /* TE vario computation from Kalman filter output. Taken from OpenVario. */
-float ComputeVario(const float p, const float d_p)
+static float ComputeVario(const float p, const float d_p)
 {
   static const float FACTOR = -2260.389548275485;
   static const float EXP = -0.8097374740609689;
@@ -234,7 +235,10 @@ void sensor_update_output(void) {
 			/* compute current TE vario value */
 			vario_val = ComputeVario(vkf.x_abs_, vkf.x_vel_);
 			ESP_LOGD(TAG, "%s: vario_val=%f\n", __func__, vario_val);
-			// TODO: Unblock network -> feed data.
+			/* Unblock network -> feed data */
+			xSemaphoreGive(net_feed_semaphore);
+			/* Unblock audio update -> feed data */
+			xSemaphoreGive(audio_feed_semaphore);
 			break;
 		default:
 			break;
@@ -251,55 +255,92 @@ static float compute_pressure(ms5611_drv_t *dev) {
 	int32_t rawpress;
 
 	ms5611_start_conv_temp(dev);
-	usleep(CONVERSION_BEAT_US);
+	vTaskDelay(2*CONVERSION_BEAT_US/(1000*portTICK_PERIOD_MS));
 	rawtemp = ms5611_get_conv(dev);
 
 	ms5611_start_conv_press(dev);
-	usleep(CONVERSION_BEAT_US);
+	vTaskDelay(2*CONVERSION_BEAT_US/(1000*portTICK_PERIOD_MS));
 	rawpress = ms5611_get_conv(dev);
 
 	return ms5611_get_pressure(dev, rawpress, rawtemp);
-
 }
 
-void sensor_read_task(void *pvParameter) {
-	ms5611_drv_t tep_dev;
-	ms5611_drv_t dp_dev;
-	ms5611_drv_t sp_dev;
+/* Sensor device structs */
+ms5611_drv_t tep_dev;
+ms5611_drv_t dp_dev;
+ms5611_drv_t sp_dev;
+SemaphoreHandle_t timer_semaphore = NULL;
 
-	vTaskDelay(100);
+static void sensor_read_timer_callback(void *arg) {
+	xSemaphoreGive(timer_semaphore);
+}
 
+static void sensor_read_task(void *pvParameter) {
+	/* run main loop */
+	while(1) {
+		if (xSemaphoreTake(timer_semaphore, portMAX_DELAY)!= pdTRUE)
+			ESP_LOGW(TAG, "semaphore failed!\n");
+		sensor_read_round(&tep_dev, &dp_dev, &sp_dev);
+		sensor_update_output();
+	}
+}
+
+
+int sensor_read_init(void) {
+	/* I2C for sensors */
 	int i2c_master_port = I2C_NUM_0;
-	i2c_config_t conf;
-	conf.mode = I2C_MODE_MASTER;
-	conf.sda_io_num = I2C_SDA;
-	conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
-	conf.scl_io_num = I2C_SCL;
-	conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-	conf.master.clk_speed = I2C_MASTER_FREQ_HZ;
-	i2c_param_config(i2c_master_port, &conf);
-	i2c_driver_install(i2c_master_port, conf.mode,
+	i2c_config_t i2s_conf = {
+		.mode = I2C_MODE_MASTER,
+		.sda_io_num = I2C_SDA,
+		.sda_pullup_en = GPIO_PULLUP_ENABLE,
+		.scl_io_num = I2C_SCL,
+		.scl_pullup_en = GPIO_PULLUP_ENABLE,
+		.master = {
+			.clk_speed = I2C_MASTER_FREQ_HZ
+		}
+	};
+
+	i2c_param_config(i2c_master_port, &i2s_conf);
+	i2c_driver_install(i2c_master_port, i2s_conf.mode,
 		I2C_MASTER_RX_BUF_DISABLE,
 		I2C_MASTER_TX_BUF_DISABLE, 0);
 
+	/* Kalman filter */
 	KalmanFilter1d_reset(&vkf);
 	vkf.var_x_accel_ = 0.3; /* taken from openvario sensorsd.conf */
  
 	int ret = ms5611_init(&tep_dev, I2C_NUM_0, I2C_TEP_ADDR);
 	ESP_LOGD(TAG, "%s: ms5611 init: %d\n", __func__, ret);
 
-	/* init Kalman filter for TEP */
 	float tep_init = 0;
-	while ((tep_init < 100) || (tep_init > 1200))
+	int sensor_test = 0;
+	while ((tep_init < 100) || (tep_init > 1200) || (sensor_test > 1000)) {
 		tep_init = compute_pressure(&tep_dev);
+		sensor_test++;
+	}
+	if (sensor_test >= 1000) {
+		ESP_LOGE(TAG, "Can not read from TEP sensor. Finish.");
+		return ESP_FAIL;
+	}
+
         for(int i=0; i < 1000; i++)
                 KalmanFiler1d_update(&vkf, tep_init, 0.25, 1);
 
-	/* run main loop */
-	while(1) {
-		sensor_read_round(&tep_dev, &dp_dev, &sp_dev);
-		sensor_update_output();
-		usleep(CONVERSION_BEAT_US);
-	}
+	/* create read semaphore */
+	timer_semaphore = xSemaphoreCreateBinary();;
+
+	/* create read task */
+	xTaskCreate(&sensor_read_task, "sensor_read_task", STACK_SIZE, NULL, 6, NULL);
+
+	esp_timer_handle_t read_timer;
+	esp_timer_create_args_t timer_conf = {
+		.callback = &sensor_read_timer_callback,
+		.dispatch_method = ESP_TIMER_TASK
+	};
+	esp_timer_create(&timer_conf, &read_timer);
+	esp_timer_start_periodic(read_timer, CONVERSION_BEAT_US);
+
+	return ESP_OK;
 }
+
 

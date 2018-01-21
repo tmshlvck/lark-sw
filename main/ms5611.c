@@ -22,14 +22,8 @@
 #define ACK_VAL                            0x0              /*!< I2C ack value */
 #define NACK_VAL                           0x1              /*!< I2C nack value */
 
-#define I2C_TIMEOUT (1000 / portTICK_RATE_MS)
-
-static int ms2tick(int ms) {
-	if (ms < portTICK_PERIOD_MS)
-		return 1;
-	else
-		return ms / portTICK_PERIOD_MS;
-}
+#define I2C_TIMEOUT 1000
+#define TIMESLICES(x) ((x+portTICK_RATE_MS-1)/portTICK_RATE_MS)
 
 static esp_err_t ms5611_i2c_cmd(i2c_port_t i2c_num, uint8_t addr, uint8_t command)
 {
@@ -39,7 +33,7 @@ static esp_err_t ms5611_i2c_cmd(i2c_port_t i2c_num, uint8_t addr, uint8_t comman
 	i2c_master_write_byte(cmd, addr << 1 | WRITE_BIT, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, command, ACK_CHECK_EN);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(i2c_num, cmd, I2C_TIMEOUT);
+	ret = i2c_master_cmd_begin(i2c_num, cmd, TIMESLICES(I2C_TIMEOUT));
 	i2c_cmd_link_delete(cmd);
 	if (ret != ESP_OK) {
 		return ret;
@@ -57,7 +51,7 @@ static esp_err_t ms5611_i2c_write_byte(i2c_port_t i2c_num, uint8_t addr, uint8_t
 	i2c_master_write_byte(cmd, reg, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, data, ACK_CHECK_DIS);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(i2c_num, cmd, I2C_TIMEOUT);
+	ret = i2c_master_cmd_begin(i2c_num, cmd, TIMESLICES(I2C_TIMEOUT));
 	i2c_cmd_link_delete(cmd);
 	if (ret != ESP_OK) {
 		return ret;
@@ -73,14 +67,13 @@ static esp_err_t ms5611_i2c_read_byte(i2c_port_t i2c_num, uint8_t addr, uint8_t 
 	if (ret != ESP_OK) {
 		return ret;
 	}
-//	vTaskDelay(ms2tick(30));
 
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	i2c_master_start(cmd);
 	i2c_master_write_byte(cmd, addr | READ_BIT, ACK_CHECK_EN);
 	i2c_master_read_byte(cmd, data, NACK_VAL);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(i2c_num, cmd, I2C_TIMEOUT);
+	ret = i2c_master_cmd_begin(i2c_num, cmd, TIMESLICES(I2C_TIMEOUT));
 	i2c_cmd_link_delete(cmd);
 	return ret;
 }
@@ -93,7 +86,6 @@ static esp_err_t ms5611_i2c_read(i2c_port_t i2c_num, uint8_t addr, uint8_t reg, 
 	if (ret != ESP_OK) {
 		return ret;
 	}
-//	vTaskDelay(ms2tick(30));
 
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	i2c_master_start(cmd);
@@ -102,7 +94,7 @@ static esp_err_t ms5611_i2c_read(i2c_port_t i2c_num, uint8_t addr, uint8_t reg, 
 		i2c_master_read(cmd, data, size-1, ACK_VAL);
 	i2c_master_read_byte(cmd, data+size-1, NACK_VAL);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(i2c_num, cmd, I2C_TIMEOUT);
+	ret = i2c_master_cmd_begin(i2c_num, cmd, TIMESLICES(I2C_TIMEOUT));
 	i2c_cmd_link_delete(cmd);
 	return ret;
 }
@@ -151,7 +143,7 @@ static int ms5611_read_PROM(ms5611_drv_t *dev)
  */
 void ms5611_reset(ms5611_drv_t *dev)
 {
-	ms5611_i2c_cmd(dev->i2c_num, dev->addr, MS5611_RESET);
+	ms5611_i2c_cmd(dev->i2c_num, dev->addr, TIMESLICES(MS5611_RESET));
 }
 
 #define MS5611_RESET_TIME 5
@@ -165,7 +157,7 @@ int ms5611_init(ms5611_drv_t *dev, i2c_port_t i2c_num, uint8_t addr)
 	dev->addr = addr;
 
 	ms5611_reset(dev); // reset the device to populate its internal PROM registers
-	vTaskDelay(ms2tick(MS5611_RESET_TIME));
+	vTaskDelay(MS5611_RESET_TIME/portTICK_PERIOD_MS);
 	if (ms5611_read_PROM(dev)) {
 		return -1;
 	}

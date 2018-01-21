@@ -68,7 +68,6 @@ void control_task(void *pvParameter) {
 	uint32_t button_num;
 
 	init_buttons();
-	audiovario_start();
 
 	int voldir=100;
 

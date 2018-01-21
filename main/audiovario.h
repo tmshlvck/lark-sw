@@ -24,12 +24,14 @@
 #define AUDIOVARIO_H
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 /* FreeRTOS-specific and Lark-specific config */
 #define AUDIO_I2S_NUM 0
-#define AUDIO_BUFFER_SIZE 8192
+#define AUDIO_BUFFER_SIZE 4096
+#define AUDIO_DMA_BUFFER_SIZE 1024
+#define AUDIO_DMA_BUFFER_NUM 4
 #define AUDIO_TASK_PERIOD_MS 10
-#define AUDIO_STACK_SIZE 2048
 
 #define AUDIO_SAMPLE_RATE (44100)
 #define AUDIO_SAMPLE_BITS (16)
@@ -68,6 +70,8 @@ typedef enum audiovario_mode {
   vario = 0,
   stf   = 1
 } audiovario_mode_t;
+
+extern SemaphoreHandle_t audio_feed_semaphore;
 
 /* API definitions */
 
