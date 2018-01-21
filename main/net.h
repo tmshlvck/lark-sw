@@ -24,7 +24,7 @@
 
 #define LARK_DEFAULT_SSID "lark-vario"
 #define LARK_MAX_STA_CONN 8
-#define LARK_DEFAULT_PWD "velikychobutek"
+#define LARK_DEFAULT_PWD ""
 #define NMEA_PORT 4353
 
 extern SemaphoreHandle_t net_feed_semaphore; 
