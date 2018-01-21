@@ -8,6 +8,10 @@ The Lark HW & SW forms a device that physically connects to pitot-static system 
 
 The software design, connectivity and core is heavily inspired by OpenVario project (http://openvario.org/) and I am reusing certain portions of the code. The protocol for connecting a glide computer is also taken from OpenVario. Currently XCSoar (https://www.xcsoar.org/) with OpenVario protocol is supported.
 
+See Big Picture:
+
+![lark-bigpic](https://user-images.githubusercontent.com/1937910/35197228-ce2cd9ac-fedc-11e7-8dc7-9850e248dcaa.png)
+
 ## Software internals are build on ESP32 framework ESP-IDF.
 Existing & planned components:
 * MS5611 - taken from Crazyflie-Firmware, more rigorous rewrite pending.
