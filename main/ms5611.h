@@ -1,7 +1,26 @@
+/* Lark MS5611 driver
+ * Copyright (C) 2018 Tomas Hlavacek (tomas.hlavacek@akaflieg.tu-darmstadt.de)
+ * Copyright (C) 2011-2012 Bitcraze AB
+ * Copyright (C) 2011 Fabio Varesano <fvaresano@yahoo.it>
+ * 
+ * This file is part of Lark.
+ *
+ * Lark is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Lark is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Lark.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #ifndef MS5611_H
 #define MS5611_H
-
-//#include <stdbool.h>
 
 // addresses of the device
 #define MS5611_ADDR_CSB_HIGH  0x76   //CBR=1 0x76 I2C address when CSB is connected to HIGH (VCC)
@@ -69,3 +88,4 @@ float ms5611_get_pressure(ms5611_drv_t *dev, int32_t rawpress, int32_t rawtemp);
 float ms5611_calc_altitude(float pressure/*, float* ground_pressure, float* ground_temp*/);
 
 #endif // MS5611_H
+
