@@ -9,7 +9,7 @@ The Lark HW & SW forms a device that physically connects to pitot-static system 
 The software design, connectivity to XCSoar and computations are heavily inspired by OpenVario project (http://openvario.org/) and I am re-using certain portions of the code. Currently XCSoar (https://www.xcsoar.org/) with OpenVario protocol is supported with the code taken from OpenVario.
 
 See Big Picture:
-![lark-bigpic](https://user-images.githubusercontent.com/1937910/35197346-3f1961de-fede-11e7-9c7e-9617e9dce038.png)
+![lark-bigpic](https://user-images.githubusercontent.com/1937910/35349247-af350b68-013a-11e8-8e8e-ceb67e1bd683.png)
 
 ## Software internals are build on ESP32 framework ESP-IDF.
 Existing & planned components:
@@ -30,3 +30,7 @@ Existing & planned components:
 * Add a new device: Port: TCP client, IP address: 192.168.4.1, TCP port: 4353, Driver: OpenVario
 * The OpenVario Lark device has to be in the first position in the device list
 * The Lark should connect at this point & monitoring shows NMEA sentences flowing from Lark
+
+## Hardware
+ * TBD
+ * https://github.com/tmshlvck/lark-hw
