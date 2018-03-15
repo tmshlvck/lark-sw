@@ -261,15 +261,22 @@ BaseType_t audiovario_start(void) {
 		return ESP_FAIL;
 
 	i2s_config_t i2s_config = {
-		.mode = I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN,
+		.mode = I2S_MODE_MASTER | I2S_MODE_TX,
 		.sample_rate =  AUDIO_SAMPLE_RATE,
 		.bits_per_sample = AUDIO_SAMPLE_BITS,
 		.channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
-        	.communication_format = I2S_COMM_FORMAT_I2S_MSB,
+        	.communication_format = I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB,
 		.dma_buf_count = AUDIO_DMA_BUFFER_NUM,
         	.dma_buf_len = AUDIO_DMA_BUFFER_SIZE,
         	.use_apll = 0,
 		.intr_alloc_flags = ESP_INTR_FLAG_LEVEL1
+	};
+
+	static const i2s_pin_config_t pin_config = {
+		.bck_io_num = 26,
+		.ws_io_num = 27,
+		.data_out_num = 25,
+		.data_in_num = I2S_PIN_NO_CHANGE
 	};
 
 	esp_err_t err = i2s_driver_install(AUDIO_I2S_NUM, &i2s_config, 0, NULL);
@@ -278,8 +285,9 @@ BaseType_t audiovario_start(void) {
 		return err;
 	}
 
-	i2s_set_dac_mode(I2S_DAC_CHANNEL_RIGHT_EN);
-    	i2s_set_clk(AUDIO_I2S_NUM, AUDIO_SAMPLE_RATE, AUDIO_SAMPLE_BITS, I2S_CHANNEL_MONO);
+	i2s_set_pin(AUDIO_I2S_NUM, &pin_config);
+
+	i2s_set_sample_rates(AUDIO_I2S_NUM, AUDIO_SAMPLE_RATE);
 
 	audiovario_init_synth();
 
